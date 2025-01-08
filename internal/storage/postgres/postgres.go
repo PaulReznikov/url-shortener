@@ -62,6 +62,7 @@ func New(storagePath string) (*Storage, error) {
 
 func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 	const op = "storage.postgres.SaveURL"
+	var id int64
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -73,14 +74,9 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 		}
 	}()
 
-	stmt, err := tx.Prepare(`INSERT INTO url(alias, url)
-									VALUES($1, $2) RETURNING id`)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-	defer stmt.Close()
-
-	result, err := stmt.Exec(alias, urlToSave)
+	query := `INSERT INTO url(alias, url)
+									VALUES($1, $2) RETURNING id`
+	err = tx.QueryRow(query, alias, urlToSave).Scan(&id)
 	if err != nil {
 		//TODO refactor this
 		var pqErr *pq.Error
@@ -91,15 +87,46 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
 	err = tx.Commit()
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return id, nil
+}
+
+func (s *Storage) GetURL(alias string) (string, error) {
+	const op = "storage.postgres.GetURL"
+	var url string
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	query := `SELECT url FROM url
+				WHERE alias = $1`
+
+	row := tx.QueryRow(query, alias)
+
+	err = row.Scan(&url)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Обработка ситуации, когда запрос не вернул данных
+			return "", fmt.Errorf("%s: %w", op, storage.ErrURLNotFound)
+		}
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	return url, nil
 }
