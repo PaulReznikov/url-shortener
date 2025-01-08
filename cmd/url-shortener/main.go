@@ -34,6 +34,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	_ = storage
+
+	url, err := storage.GetURL("google")
+	if err != nil {
+		log.Error("failed to get url", sl.Err(err))
+	}
+
+	fmt.Println(url)
+
+	url, err = storage.GetURL("amazon")
+	if err != nil {
+		log.Error("failed to get url", sl.Err(err))
+	}
+
+	fmt.Println(url)
+
 	//TODO: init router: chi, "chi render"
 
 	//TODO: run server

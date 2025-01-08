@@ -74,9 +74,15 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 		}
 	}()
 
-	query := `INSERT INTO url(alias, url)
-									VALUES($1, $2) RETURNING id`
-	err = tx.QueryRow(query, alias, urlToSave).Scan(&id)
+	stmt, err := tx.Prepare(`INSERT INTO url(alias, url)
+									VALUES($1, $2) RETURNING id`)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	defer stmt.Close()
+
+	err = stmt.QueryRow(alias, urlToSave).Scan(&id)
 	if err != nil {
 		//TODO refactor this
 		var pqErr *pq.Error
@@ -109,12 +115,13 @@ func (s *Storage) GetURL(alias string) (string, error) {
 		}
 	}()
 
-	query := `SELECT url FROM url
-				WHERE alias = $1`
+	stmt, err := tx.Prepare(`SELECT url FROM url
+				WHERE alias = $1`)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
 
-	row := tx.QueryRow(query, alias)
-
-	err = row.Scan(&url)
+	err = stmt.QueryRow(alias).Scan(&url)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Обработка ситуации, когда запрос не вернул данных
