@@ -121,6 +121,8 @@ func (s *Storage) GetURL(alias string) (string, error) {
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
+	defer stmt.Close()
+
 	err = stmt.QueryRow(alias).Scan(&url)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -136,4 +138,49 @@ func (s *Storage) GetURL(alias string) (string, error) {
 	}
 
 	return url, nil
+}
+
+func (s *Storage) DeleteURL(alias string) error {
+	const op = "storage.postgres.DeleteURL"
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(`DELETE FROM url
+									WHERE alias = $1`)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	defer stmt.Close()
+
+	result, err := stmt.Exec(alias)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if rowsAffected < 1 {
+		return fmt.Errorf("%s: %w", op, sql.ErrNoRows)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+
 }
